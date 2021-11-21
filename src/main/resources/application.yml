@@ -1,0 +1,50 @@
+host: localhost
+
+server:
+  port: 8066
+  tomcat:
+    max-http-form-post-size: 2147483648
+
+
+spring:
+  application:
+    name: adjustment
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/${POSTGRES_DB_NAME:postgres}?currentSchema=${POSTGRES_SCHEMA:adjustment_ui_test}
+    driverClassName: org.postgresql.Driver
+    username: postgres
+    password: postgres
+    hikari:
+      max-lifetime: 1765000
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: true
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        jdbc:
+          lob:
+            non_contextual_creation: true
+  flyway:
+    enabled: false
+    baseline-on-migrate: true
+    locations: classpath:migration/local
+  servlet:
+    multipart:
+      max-file-size: -1
+      max-request-size: -1
+
+#data-provision:
+#  source:
+#    username: admin
+#    password: password
+#    url: jdbc:postgresql://192.168.100.10:5432/postgres
+#  target:
+#    username: admin
+#    password: password
+#    url: jdbc:postgresql://192.168.100.10:5432/postgres
+
+
