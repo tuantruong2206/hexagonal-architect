@@ -11,9 +11,17 @@ import vn.tat.hexagonal.dto.MemoryStats;
 import vn.tat.hexagonal.message.ResponseFile;
 import vn.tat.hexagonal.message.ResponseMessage;
 import vn.tat.hexagonal.model.FileDB;
-//import vn.tat.hexagonal.provision.config.DatabaseConnectionConfig;
+import vn.tat.hexagonal.provision.config.DatabaseConnectionConfig;
+import vn.tat.hexagonal.provision.pipe.DataPipeLineManager;
+import vn.tat.hexagonal.provision.pipe.IngestDataPipeOperator;
+import vn.tat.hexagonal.provision.pipe.PostgresDatabasePipeOperator;
+import vn.tat.hexagonal.provision.processor.IngestDataProcessor;
+import vn.tat.hexagonal.provision.processor.ReadDataProcessor;
+import vn.tat.hexagonal.provision.processor.WriteDataProcessor;
+import vn.tat.hexagonal.provision.util.SqlBuilder;
 import vn.tat.hexagonal.service.FileStorageService;
 
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -30,11 +38,11 @@ public class FileController {
 
     private final FileStorageService storageService;
 
-//    private final DatabaseConnectionConfig databaseConnectionConfig;
+    private final DatabaseConnectionConfig databaseConnectionConfig;
 
-    public FileController(FileStorageService fileStorageService/*, DatabaseConnectionConfig databaseConnectionConfig*/) {
+    public FileController(FileStorageService fileStorageService, DatabaseConnectionConfig databaseConnectionConfig) {
         this.storageService = fileStorageService;
-//        this.databaseConnectionConfig = databaseConnectionConfig;
+        this.databaseConnectionConfig = databaseConnectionConfig;
     }
 
     @PostMapping("/upload")
@@ -42,7 +50,7 @@ public class FileController {
         String message = "";
         try {
             for (MultipartFile f : files)
-            storageService.store(f);
+                storageService.store(f);
 
             message = "Uploaded the file successfully: " + files[0].getOriginalFilename();
             return ResponseEntity.status(HttpStatus.OK).body(new ResponseMessage(message));
@@ -52,23 +60,26 @@ public class FileController {
         }
     }
 
-//    @PostMapping("/upload/{param}")
-//    public ResponseEntity<?> doProvision(@PathVariable final long param) throws IOException, SQLException {
-//
-//        PostgresDatabasePipeOperator dbOper1 = new PostgresDatabasePipeOperator(databaseConnectionConfig.getSource(), new ReadDataProcessor());
-//
-//        PostgresDatabasePipeOperator dbOper2 = new PostgresDatabasePipeOperator(databaseConnectionConfig.getTarget(), dbOper1.getStreamInfra().getDataItor(), new WriteDataProcessor());
-//
-//        dbOper1.setSqlStatement(SqlBuilder.buildSource());
-//        dbOper2.setSqlStatement(SqlBuilder.buildTarget());
-//
-//        DataPipeLineManager dataPipeLineManager = new DataPipeLineManager();
-//        dataPipeLineManager.addOperator(dbOper1);
-//        dataPipeLineManager.addOperator(dbOper2);
-//        dataPipeLineManager.runPipeLine();
-//
-//        return new ResponseEntity<>(new ResponseMessage("DONE"), HttpStatus.OK);
-//    }
+    @PostMapping("/upload/{param}")
+    public ResponseEntity<?> doProvision(@PathVariable final long param) throws IOException, SQLException {
+
+        PostgresDatabasePipeOperator dbOper1 = new PostgresDatabasePipeOperator(databaseConnectionConfig.getSource(), new ReadDataProcessor());
+
+        IngestDataPipeOperator dataPipeOperator = new IngestDataPipeOperator(dbOper1.getStreamInfra().getDataItor(), new IngestDataProcessor());
+
+        PostgresDatabasePipeOperator dbOper2 = new PostgresDatabasePipeOperator(databaseConnectionConfig.getTarget(), dataPipeOperator.getStreamInfra().getDataItor(), new WriteDataProcessor());
+
+        dbOper1.setSqlStatement(SqlBuilder.buildSource());
+        dbOper2.setSqlStatement(SqlBuilder.buildTarget());
+
+        DataPipeLineManager dataPipeLineManager = new DataPipeLineManager();
+        dataPipeLineManager.addOperator(dbOper1);
+        dataPipeLineManager.addOperator(dataPipeOperator);
+        dataPipeLineManager.addOperator(dbOper2);
+        dataPipeLineManager.runPipeLine();
+
+        return new ResponseEntity<>(new ResponseMessage("DONE"), HttpStatus.OK);
+    }
 
     @GetMapping("/files")
     public ResponseEntity<List<ResponseFile>> getListFiles() {
@@ -78,11 +89,11 @@ public class FileController {
                     .path("/files/")
                     .path(dbFile.getId())
                     .toUriString();
-                return new ResponseFile(
-                        dbFile.getName(),
-                        fileDownloadUri,
-                        dbFile.getType(),
-                        dbFile.getDataField().length);
+            return new ResponseFile(
+                    dbFile.getName(),
+                    fileDownloadUri,
+                    dbFile.getType(),
+                    dbFile.getDataField().length);
 
         }).collect(Collectors.toList());
 
